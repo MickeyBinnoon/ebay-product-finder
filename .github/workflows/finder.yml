@@ -1,10 +1,14 @@
 name: ebay-product-finder
 # Daily: scrape eBay from GitHub's datacenter runner (proven to work), apply the 5
-# filters, and refresh the Google Sheet. Manual runs via the Actions tab too.
+# filters, publish final.csv (the Google Sheet pulls it via IMPORTDATA). Manual
+# runs via the Actions tab too.
 on:
   schedule:
     - cron: '30 5 * * *'   # 05:30 UTC daily
   workflow_dispatch: {}
+
+permissions:
+  contents: write   # commit the refreshed final.csv back to the repo
 
 jobs:
   find:
@@ -23,12 +27,16 @@ jobs:
             -O out/pool.json -s CLOSESPIDER_ITEMCOUNT=160 -s CLOSESPIDER_TIMEOUT=1500
       - name: Apply the 5 filters
         run: python curate_finder.py
-      - name: Upload results artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qualifying-products
-          path: final.json
-      - name: Refresh the Google Sheet
+      - name: Build final.csv
+        run: python to_csv.py
+      - name: Publish final.csv (auto-refresh source for the sheet)
+        run: |
+          git config user.name "ebay-finder-bot"
+          git config user.email "actions@github.com"
+          git add -f final.csv
+          git commit -m "data: refresh qualifying products $(date -u +%FT%TZ)" || echo "no change"
+          git push
+      - name: Optional webhook push (only if SHEET_WEBHOOK_URL is set)
         env:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
         run: python post_to_sheet.py
