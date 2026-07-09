@@ -1,0 +1,34 @@
+name: ebay-product-finder
+# Daily: scrape eBay from GitHub's datacenter runner (proven to work), apply the 5
+# filters, and refresh the Google Sheet. Manual runs via the Actions tab too.
+on:
+  schedule:
+    - cron: '30 5 * * *'   # 05:30 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Scrape eBay (search -> item -> sold view -> seller count)
+        run: |
+          Q="massage gun||dash cam||coffee grinder||espresso machine||stand mixer||microwave||blender||air fryer||electric shaver||hair dryer||robot vacuum||cordless drill||projector||security camera||soundbar||electric kettle||food processor||toaster"
+          scrapy crawl products -a queries="$Q" -a max_pages=2 \
+            -O out/pool.json -s CLOSESPIDER_ITEMCOUNT=160 -s CLOSESPIDER_TIMEOUT=1500
+      - name: Apply the 5 filters
+        run: python curate_finder.py
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualifying-products
+          path: final.json
+      - name: Refresh the Google Sheet
+        env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+        run: python post_to_sheet.py
