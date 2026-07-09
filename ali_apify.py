@@ -53,7 +53,11 @@ def search_one(query, tok):
            f"?token={tok}&maxItems={MAX_ITEMS}")
     body = json.dumps({"queries": [query]}).encode()
     last = None
-    for _ in (1, 2, 3):  # cold runs occasionally 400 / return empty; retry
+    # An empty result usually means AliExpress throttled Apify's shared free IP;
+    # wait longer each retry so a fresh/recovered IP serves the next attempt.
+    for wait in (0, 15, 30, 45):
+        if wait:
+            time.sleep(wait)
         try:
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=180) as r:
@@ -62,7 +66,6 @@ def search_one(query, tok):
                 return items
         except Exception as e:  # noqa: BLE001 - retry any transient failure
             last = e
-        time.sleep(4)
     if last:
         raise last
     return []
@@ -133,8 +136,9 @@ def main():
                     "ali_match": best if confident else None,
                     "ali_confident": confident, "ali_source": "apify:thirdwatch"})
         print(f"  [{i}] {'MATCH' if confident else 'weak '} items={len(items)} "
-              f"ov={best['overlap'] if best else '-'} ${best['ali_price'] if best else '-'} | {x['title'][:38]}")
-        time.sleep(6)  # space out to stay under the free-plan/AliExpress throttle
+              f"ov={best['overlap'] if best else '-'} ${best['ali_price'] if best else '-'} | {x['title'][:38]}",
+              flush=True)
+        time.sleep(int(os.environ.get("APIFY_DELAY", "6")))  # space out vs the free-plan/AliExpress throttle
     json.dump(out, open("ali_enriched.json", "w"), indent=2)
     print(f"enriched {len(out)}, {sum(1 for r in out if r['ali_confident'])} confident matches")
 
