@@ -14,9 +14,9 @@ export SHEET_ID="${SHEET_ID:-1zm5_swG9rt9R82x3wLBXgSZlGw9uuKDhsFWcMkcke08}"
 echo "[$(date -u +%FT%TZ)] daily finder run start"
 
 # 1. eBay scrape (residential IP). Dropship-leaning niches so Tab 2 has AliExpress hits.
-Q="massage gun||dash cam||car phone holder||neck massager||pet hair remover||led strip lights||solar garden lights||fascia gun||mini projector||bluetooth earbuds||electric shaver||hair clipper||security camera||robot vacuum||smart watch||portable blender||espresso machine||air fryer||stand mixer||coffee grinder"
+Q="massage gun||fascia gun||robot vacuum||dash cam||smart watch||portable blender||neck massager||car phone holder||led strip lights||security camera||electric shaver||hair clipper||mini projector||bluetooth earbuds"
 "$PY" -m scrapy crawl products -a queries="$Q" -a max_pages=2 \
-  -O out/pool.json -s CLOSESPIDER_ITEMCOUNT=200 -s CLOSESPIDER_TIMEOUT=1500 || echo "scrape had errors"
+  -O out/pool.json -s CLOSESPIDER_ITEMCOUNT=120 -s CLOSESPIDER_TIMEOUT=1000 || echo "scrape had errors"
 
 # 2. 5 filters -> final.json ; split winners (Tab1) / dropshippable candidates (Tab2)
 "$PY" curate_finder.py || exit 1

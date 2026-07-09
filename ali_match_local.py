@@ -41,9 +41,19 @@ def toks(s):
     return set(t for t in re.findall(r"[a-z0-9]+", (s or "").lower()) if t not in STOP and len(t) > 1)
 
 
+# AliExpress localizes to the session currency (this Mac's IP => ILS/shekels), so
+# parse whatever symbol shows and convert to USD.
+_FX = {"US$": 1.0, "$": 1.0, "ILS": 0.27, "₪": 0.27, "€": 1.08, "£": 1.27}
+_CUR_RE = re.compile(r"(US ?\$|ILS|₪|€|£|\$)\s?([\d.,]+)")
+
+
 def price_usd(text):
-    m = re.search(r"US ?\$\s?([\d.,]+)", text) or re.search(r"\$\s?([\d.,]+)", text)
-    return float(m.group(1).replace(",", "")) if m else None
+    m = _CUR_RE.search(text or "")
+    if not m:
+        return None
+    sym = m.group(1).replace(" ", "")
+    val = float(m.group(2).replace(",", ""))
+    return round(val * _FX.get(sym, 1.0), 2)
 
 
 def orders(text):
