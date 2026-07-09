@@ -10,6 +10,8 @@ cd "$(dirname "$0")"
 PY="${FINDER_PY:-$HOME/.finder-venv/bin/python}"          # venv311: scrapy+nodriver+sheets
 export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gws/sa.json}"
 export SHEET_ID="${SHEET_ID:-1zm5_swG9rt9R82x3wLBXgSZlGw9uuKDhsFWcMkcke08}"
+export APIFY_DELAY="${APIFY_DELAY:-25}"          # spacing that beats the free-tier throttle
+export APIFY_MAX_CANDIDATES="${APIFY_MAX_CANDIDATES:-14}"  # full candidate coverage
 
 echo "[$(date -u +%FT%TZ)] daily finder run start"
 
