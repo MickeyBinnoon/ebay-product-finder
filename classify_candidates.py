@@ -30,7 +30,10 @@ GENERIC_CUES = re.compile(
 def is_dropshippable(x):
     brand = (x.get("brand") or "").strip().lower()
     title = (x.get("title") or "")
-    if brand in WESTERN_BRANDS or any(b in brand for b in WESTERN_BRANDS):
+    tl = title.lower()
+    # exclude genuine Western retail brands by BRAND *or* TITLE - they are not sold
+    # on AliExpress, so any "match" is a clone/accessory (e.g. a $20 "Samsung watch").
+    if any(b in brand or b in tl for b in WESTERN_BRANDS):
         return False
     generic_brand = brand in ("", "unbranded", "none", "does not apply", "generic", "n/a")
     # short no-name brand (e.g. VGR, ULTIMEA, ANSVICAM) also tends to be AliExpress-sourced

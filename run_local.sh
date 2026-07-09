@@ -22,8 +22,9 @@ Q="massage gun||fascia gun||robot vacuum||dash cam||smart watch||portable blende
 "$PY" curate_finder.py || exit 1
 "$PY" classify_candidates.py || exit 1
 
-# 3. AliExpress match (residential, paced). Best-effort: throttle keeps prior Tab 2.
-"$PY" ali_match_local.py || echo "ali match had errors (throttle?) - Tab 2 may be sparse"
+# 3. AliExpress match via Apify (cloud residential IPs - no throttle, no CAPTCHA).
+#    Reads the token from ~/.config/apify/token. Falls back to nothing if it errors.
+"$PY" ali_apify.py || echo "apify step had errors - Tab 2 keeps prior data"
 
 # 4. write BOTH tabs straight to the Google Sheet (private, no formulas/gists)
 "$PY" sheet_write.py
