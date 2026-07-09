@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 ACTOR = "thirdwatch~aliexpress-product-scraper"
@@ -45,19 +46,26 @@ def query_for(x):
     return base.strip()[:70]
 
 
-def search(query, tok):
+def search_one(query, tok):
+    """One actor run for ONE query (this actor returns 0 for multi-query runs).
+    Returns the product list for that query."""
     url = (f"https://api.apify.com/v2/acts/{ACTOR}/run-sync-get-dataset-items"
            f"?token={tok}&maxItems={MAX_ITEMS}")
     body = json.dumps({"queries": [query]}).encode()
     last = None
-    for attempt in (1, 2, 3):  # the actor occasionally 400s on a cold run; retry
+    for _ in (1, 2, 3):  # cold runs occasionally 400 / return empty; retry
         try:
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=180) as r:
-                return json.load(r)
+                items = json.load(r)
+            if items:
+                return items
         except Exception as e:  # noqa: BLE001 - retry any transient failure
             last = e
-    raise last
+        time.sleep(4)
+    if last:
+        raise last
+    return []
 
 
 def field(it, *names):
@@ -67,46 +75,66 @@ def field(it, *names):
     return None
 
 
+def normalize(it):
+    """Pull the fields we use out of one Apify result item."""
+    price = field(it, "sale_price", "salePrice", "price", "min_price")
+    try:
+        price = float(price) if price is not None else None
+    except (TypeError, ValueError):
+        price = None
+    return {
+        "title": field(it, "title", "product_title", "name") or "",
+        "price": price,
+        "url": field(it, "url", "product_url", "productUrl", "link"),
+        "orders": field(it, "orders_count", "orders", "trade_count", "sold"),
+        "image": field(it, "image_url", "image", "thumbnail"),
+    }
+
+
 def main():
     tok = token()
     candidates = json.load(open("candidates.json")) if os.path.exists("candidates.json") else []
+    if not candidates:
+        json.dump([], open("ali_enriched.json", "w"))
+        print("no candidates")
+        return
+
+    # The free plan reliably serves only a handful of scrapes per session before
+    # AliExpress throttles Apify's shared IPs, so look up the TOP candidates (already
+    # velocity-sorted) one at a time, spaced out. Raise the cap on a paid Apify plan.
+    cap = int(os.environ.get("APIFY_MAX_CANDIDATES", "8"))
     out = []
     for i, x in enumerate(candidates):
-        q = query_for(x)
+        if i >= cap:
+            out.append({**x, "ali_match": None, "ali_confident": False,
+                        "ali_source": "apify:thirdwatch", "ali_skipped": "over daily cap"})
+            continue
         try:
-            items = search(q, tok) or []
-        except Exception as e:
+            items = [normalize(it) for it in search_one(query_for(x), tok)]
+        except Exception as e:  # noqa: BLE001
             items = []
             print(f"  [{i}] apify error: {type(e).__name__}: {e}", file=sys.stderr)
         et = toks(x["title"])
-        ebay_price = x.get("price_usd") or 0
-        # a same-product match can't cost a tiny fraction of the eBay price - that is
-        # an accessory (strap/case/part), not the product. Require >= 20% of eBay.
-        floor = 0.2 * ebay_price
+        ebay = x.get("price_usd") or 0
+        # same-product price band: an arbitrage match is CHEAPER on AliExpress, not a
+        # tiny fraction (accessory) nor pricier (different/bigger product).
+        lo, hi = 0.15 * ebay, 1.3 * ebay
         best = None
-        for it in items:
-            title = field(it, "title", "product_title", "name") or ""
-            price = field(it, "sale_price", "salePrice", "price", "min_price")
-            try:
-                price = float(price) if price is not None else None
-            except (TypeError, ValueError):
-                price = None
-            if price is None or price < floor:   # skip accessories / unpriced
+        for p in items:
+            if p["price"] is None or not (lo <= p["price"] <= hi):
                 continue
-            ov = len(et & toks(title)) / max(len(et), 1)
+            ov = len(et & toks(p["title"])) / max(len(et), 1)
             if best is None or ov > best["overlap"]:
-                best = {"overlap": round(ov, 2),
-                        "ali_url": field(it, "url", "product_url", "productUrl", "link"),
-                        "ali_price": round(price, 2),
-                        "ali_orders": field(it, "orders_count", "orders", "trade_count", "sold"),
-                        "ali_title": title[:120],
-                        "ali_image": field(it, "image_url", "image", "thumbnail")}
+                best = {"overlap": round(ov, 2), "ali_url": p["url"],
+                        "ali_price": round(p["price"], 2), "ali_orders": p["orders"],
+                        "ali_title": p["title"][:120], "ali_image": p["image"]}
         confident = bool(best and best["overlap"] >= 0.5 and best.get("ali_url"))
-        out.append({**x, "ali_cards_seen": len(items),
+        out.append({**x, "ali_items_seen": len(items),
                     "ali_match": best if confident else None,
                     "ali_confident": confident, "ali_source": "apify:thirdwatch"})
         print(f"  [{i}] {'MATCH' if confident else 'weak '} items={len(items)} "
-              f"ov={best['overlap'] if best else '-'} ${best['ali_price'] if best else '-'} | {x['title'][:40]}")
+              f"ov={best['overlap'] if best else '-'} ${best['ali_price'] if best else '-'} | {x['title'][:38]}")
+        time.sleep(6)  # space out to stay under the free-plan/AliExpress throttle
     json.dump(out, open("ali_enriched.json", "w"), indent=2)
     print(f"enriched {len(out)}, {sum(1 for r in out if r['ali_confident'])} confident matches")
 
