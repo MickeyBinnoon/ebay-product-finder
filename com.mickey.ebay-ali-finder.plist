@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd daily job: runs the local AliExpress step on the Mac's residential IP.
+     Install:  cp this to ~/Library/LaunchAgents/  then  launchctl load it.
+     Edit RUN_DIR below to the finder folder path, and StartCalendarInterval to your time. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mickey.ebay-ali-finder</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>RUN_DIR/run_local.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>RUN_DIR</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>RUN_DIR/finder.log</string>
+  <key>StandardErrorPath</key>
+  <string>RUN_DIR/finder.err</string>
+</dict>
+</plist>

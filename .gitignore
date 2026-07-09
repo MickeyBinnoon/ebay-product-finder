@@ -1,5 +1,21 @@
+# generated at runtime - not source
 out/
-final.json
-dl/
 __pycache__/
 *.pyc
+*.log
+finder.log
+finder.err
+err.log
+final.json
+final.csv
+winners.json
+candidates.json
+ali_enriched.json
+ali.csv
+.gist_id
+.ali_gist_id
+.venv*/
+# never commit credentials
+sa.json
+*service_account*.json
+client_secret*.json

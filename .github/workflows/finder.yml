@@ -1,17 +1,16 @@
-name: ebay-product-finder
-# Daily: scrape eBay from GitHub's datacenter runner (proven to work), apply the 5
-# filters, publish final.csv (the Google Sheet pulls it via IMPORTDATA). Manual
-# runs via the Actions tab too.
+name: ebay-backup
+# OPTIONAL cloud backup: scrape eBay + apply the 5 filters from a datacenter IP
+# (proven to work) and upload the qualifying products as a downloadable artifact.
+# This runs Mac-independently. The PRIMARY pipeline is the local Mac job
+# (run_local.sh), which also matches AliExpress and writes the Google Sheet - that
+# part needs a residential IP, which the cloud does not have.
 on:
   schedule:
     - cron: '30 5 * * *'   # 05:30 UTC daily
   workflow_dispatch: {}
 
-permissions:
-  contents: write   # commit the refreshed final.csv back to the repo
-
 jobs:
-  find:
+  ebay:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -20,23 +19,13 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
-      - name: Scrape eBay (search -> item -> sold view -> seller count)
+      - name: Scrape eBay + apply the 5 filters
         run: |
-          Q="massage gun||dash cam||coffee grinder||espresso machine||stand mixer||microwave||blender||air fryer||electric shaver||hair dryer||robot vacuum||cordless drill||projector||security camera||soundbar||electric kettle||food processor||toaster"
+          Q="massage gun||dash cam||coffee grinder||espresso machine||stand mixer||microwave||blender||air fryer||electric shaver||hair dryer||robot vacuum||projector||security camera||soundbar||electric kettle||food processor||toaster"
           scrapy crawl products -a queries="$Q" -a max_pages=2 \
             -O out/pool.json -s CLOSESPIDER_ITEMCOUNT=160 -s CLOSESPIDER_TIMEOUT=1500
-      - name: Apply the 5 filters
-        run: python curate_finder.py
-      - name: Build final.csv
-        run: python to_csv.py
-      - name: Publish final.csv (auto-refresh source for the sheet)
-        run: |
-          git config user.name "ebay-finder-bot"
-          git config user.email "actions@github.com"
-          git add -f final.csv
-          git commit -m "data: refresh qualifying products $(date -u +%FT%TZ)" || echo "no change"
-          git push
-      - name: Optional webhook push (only if SHEET_WEBHOOK_URL is set)
-        env:
-          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
-        run: python post_to_sheet.py
+          python curate_finder.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qualifying-products
+          path: final.json

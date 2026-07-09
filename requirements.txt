@@ -1,2 +1,7 @@
+# eBay scraping (pinned: 2.14+ dropped start_requests and breaks the spider)
 scrapy==2.13.4
-requests==2.32.3
+# AliExpress matching via a real browser on a residential IP
+nodriver>=0.38
+# direct Google Sheets writes via a service account
+google-api-python-client>=2.100
+google-auth>=2.30
