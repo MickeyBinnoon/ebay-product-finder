@@ -24,7 +24,8 @@ WIN_HEADER = ["Found (UTC)", "Title", "Price USD", "Seller feedback", "Ships fro
               "Sold /30d", "# sellers", "Match", "eBay link"]
 ALI_HEADER = ["Found (UTC)", "eBay title", "eBay $", "Sold /30d", "# sellers",
               "AliExpress match", "AliExpress $", "AliExpress orders", "Confidence",
-              "eBay link", "AliExpress link"]
+              "eBay link", "AliExpress link",
+              "Store", "Positive %", "Seller rating", "Store age (mo)", "Established >=6mo"]
 
 
 def load(path):
@@ -44,10 +45,24 @@ def ali_rows():
     rows = [ALI_HEADER]
     for x in load("ali_enriched.json"):
         m = x.get("ali_match") or {}
+        sel = x.get("ali_seller") or {}
+        if x.get("ali_seller_dropped"):
+            confidence = "x new seller <6mo"      # match found but store too new (hard filter)
+        elif x.get("ali_confident"):
+            confidence = "match"
+        elif x.get("ali_likely"):
+            confidence = "likely"
+        else:
+            confidence = "none"
+        est = sel.get("established_6mo")
+        est_disp = "" if est is None else ("yes" if est else "no")
+        age = sel.get("age_months")
         rows.append([now, x.get("title", "")[:120], x.get("price_usd"), x.get("sold_last_30d"),
                      x.get("distinct_sellers"), (m.get("ali_title") or "")[:100], m.get("ali_price"),
-                     m.get("ali_orders"), "match" if x.get("ali_confident") else "none",
-                     x.get("url"), m.get("ali_url", "")])
+                     m.get("ali_orders"), confidence,
+                     x.get("url"), m.get("ali_url", ""),
+                     (sel.get("store_name") or "")[:40], sel.get("positive_rate", ""),
+                     sel.get("rating", ""), (age if age is not None else ""), est_disp])
     return rows
 
 

@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A free, self-hosted daily automation that scrapes eBay for low-competition,
 fast-selling products, matches the dropshippable ones to the same product on
-AliExpress, and writes both sets into a Google Sheet. No paid scraping APIs (except
-optionally Apify for the AliExpress step), no proxies. See `README.md` for the
-product rationale and the five hard filters.
+AliExpress, and writes both sets into a Google Sheet. No paid scraping APIs and no
+proxies: the AliExpress step self-scrapes on the Mac's residential IP (Apify is kept
+only as an optional fallback). See `README.md` for the product rationale and the five
+hard filters.
 
 ## Commands
 
@@ -27,7 +28,7 @@ scrapy crawl products -a queries="massage gun||dash cam" -a max_pages=2 \
 # Run individual pipeline stages (each reads/writes JSON in the repo root)
 python curate_finder.py        # out/*.json -> final.json
 python classify_candidates.py  # final.json -> winners.json + candidates.json
-python ali_apify.py            # candidates.json -> ali_enriched.json (needs APIFY token)
+python ali_match_local.py      # candidates.json -> ali_enriched.json (self-scrape; residential IP)
 python sheet_write.py          # winners.json + ali_enriched.json -> Google Sheet
 ```
 
@@ -41,8 +42,9 @@ Verify changes by running the relevant stage and inspecting its JSON output.
   `client_email` as Editor. Sheets API must be enabled.
 - `SHEET_ID` — target Google Sheet (a default is hardcoded in `run_local.sh` and
   `sheet_write.py`).
-- Apify token — `APIFY_TOKEN` env var or `~/.config/apify/token`. Only `ali_apify.py`
-  needs it. Tokens are never printed.
+- Apify token — `APIFY_TOKEN` env var or `~/.config/apify/token`. Only the optional
+  `ali_apify.py` fallback needs it; the live `ali_match_local.py` path needs no token.
+  Tokens are never printed.
 
 ## Architecture
 
@@ -54,7 +56,7 @@ scrapy crawl products  ->  out/*.json      (raw scraped listings, per-listing ha
 curate_finder.py       ->  final.json      (the 5 filters; best row per distinct product)
 classify_candidates.py ->  winners.json    (Tab 1: all passers)
                            candidates.json (Tab 2 seed: dropshippable subset only)
-ali_apify.py           ->  ali_enriched.json (candidates + their AliExpress match)
+ali_match_local.py     ->  ali_enriched.json (candidates + their AliExpress match)
 sheet_write.py         ->  Google Sheet (two tabs, rewritten each run)
 ```
 
@@ -65,15 +67,24 @@ eBay serves datacenter IPs fine, so the scrape can run in the cloud
 blocks datacenter IPs outright** — only a residential IP clears its anti-bot. Two
 AliExpress matchers exist for this reason:
 
-- `ali_apify.py` — **the one `run_local.sh` actually uses.** Delegates scraping to the
-  Apify `thirdwatch~aliexpress-product-scraper` actor, which runs on Apify's
-  residential IPs, so it works anywhere with no CAPTCHA. Note: this actor returns 0
-  results for multi-query runs, so it is called **one query at a time**, spaced out
-  (`APIFY_DELAY`) with escalating retry-on-empty backoff to survive free-tier
-  throttling. `APIFY_MAX_CANDIDATES` caps how many candidates are looked up.
-- `ali_match_local.py` — the original matcher driving a real browser via `nodriver`
-  on the Mac's residential IP. Kept as an alternative; **not wired into `run_local.sh`**.
-  The README still describes this path — it is stale; the live job uses Apify.
+- `ali_match_local.py` — **the one `run_local.sh` actually uses.** Self-scrapes
+  AliExpress by driving a real browser via `nodriver` on the Mac's residential IP —
+  free, no API, no token, no proxy. Forces en_US/USD via the site's own currency
+  cookie (`aep_usuc_f`, injected before the single search navigation with **no warm-up
+  load** — an extra page load was observed to help trip the bot gate), so titles come
+  back in English (they token-match the English eBay titles) and prices are real USD.
+  AliExpress throttles a single IP after a burst, so it paces itself (`ALI_DELAY` +
+  jitter), caps lookups (`ALI_MAX_CANDIDATES`, default 8), detects captcha/"punish"
+  pages (0 cards + a block marker in the `<title>`; the raw HTML is unreliable — a good
+  page contains "verify"/"slider" in its scripts) and backs off (0/30/60s). A
+  **circuit-breaker aborts the run** (writing partial results) after repeated blocks,
+  rather than hammering the IP into an hours-long block. `ALI_HEADLESS=0` drives a
+  visible window (less bot-detectable); `ALI_FORCE_USD=0` skips the currency cookie.
+- `ali_apify.py` — the previous matcher; delegates scraping to the Apify
+  `thirdwatch~aliexpress-product-scraper` actor (Apify's residential IP pool, so no
+  single-IP throttle). **Kept only as a fallback** — not wired into `run_local.sh`.
+  Needs an Apify token; called one query at a time (`APIFY_DELAY`,
+  `APIFY_MAX_CANDIDATES`), since the actor returns 0 for multi-query runs.
 
 Both matchers write the **same `ali_enriched.json` shape**, so `sheet_write.py` is
 agnostic to which one ran. Preserve that shape when editing either.
