@@ -12,8 +12,8 @@ export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.
 export SHEET_ID="${SHEET_ID:-1zm5_swG9rt9R82x3wLBXgSZlGw9uuKDhsFWcMkcke08}"
 export ALI_DELAY="${ALI_DELAY:-25}"              # base spacing between AliExpress lookups (jitter added)
 export ALI_MAX_CANDIDATES="${ALI_MAX_CANDIDATES:-8}"  # single-IP safe cap (raise cautiously)
-export ALI_SELLER="${ALI_SELLER:-1}"             # enrich matches with AliExpress store data (feedback/rating/age + >=6mo filter)
-export ALI_SELLER_MAX="${ALI_SELLER_MAX:-3}"     # cap seller lookups (each is +1 request on the single-IP budget)
+export ALI_SELLER="${ALI_SELLER:-0}"             # seller enrichment OFF: the item page is client-side-rendered (runParams empty), so seller_info needs a DOM/XHR rewrite. Set 1 only to debug.
+export ALI_SELLER_MAX="${ALI_SELLER_MAX:-3}"     # cap seller lookups (each is +1 request) when ALI_SELLER=1
 
 echo "[$(date -u +%FT%TZ)] daily finder run start"
 
@@ -28,7 +28,7 @@ Q="massage gun||fascia gun||robot vacuum||dash cam||smart watch||portable blende
 
 # 3. AliExpress match by self-scraping on THIS Mac's residential IP (nodriver).
 #    Free: no API, no token, no paid tool. Forces en_US/USD, paces itself, and a
-#    circuit-breaker aborts on throttle. (ali_apify.py is kept as a fallback.)
+#    circuit-breaker aborts on throttle.
 "$PY" ali_match_local.py || echo "aliexpress step had errors - Tab 2 keeps prior data"
 
 # 4. write BOTH tabs straight to the Google Sheet (private, no formulas/gists)
