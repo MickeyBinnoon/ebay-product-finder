@@ -1,6 +1,6 @@
 """LOCAL AliExpress matcher via nodriver on a residential IP. Free: no API, no proxy,
-no paid tool. `run_local.sh` calls THIS (it replaces the Apify step). Writes the same
-ali_enriched.json shape as before, so sheet_write.py is unchanged.
+no paid tool. `run_local.sh` calls THIS. Writes the ali_enriched.json shape that
+sheet_write.py reads.
 
 Reads candidates.json (dropshippable eBay products), finds the best same-product
 AliExpress match, and records URL + price + orders + a match confidence.
@@ -294,8 +294,8 @@ async def match_one(browser, x):
 
     et = toks(x["title"])
     ebay = x.get("price_usd") or 0
-    # same-product price band (matches ali_apify): an arbitrage match is CHEAPER on
-    # AliExpress, not a tiny fraction (accessory) nor pricier (different/bigger item).
+    # same-product price band: an arbitrage match is CHEAPER on AliExpress, not a tiny
+    # fraction (accessory) nor pricier (a different/bigger item).
     lo, hi = 0.15 * ebay, 1.3 * ebay
     best = None
     for c in cards:
